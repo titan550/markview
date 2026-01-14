@@ -3,7 +3,12 @@
  * Uses markdown-it for parsing and placeholder substitution for async rendering.
  */
 
-import { normalizeNewlines, scanFencedBlocks, isFenceClosing, parseFenceOpening } from "../core/fences";
+import {
+  normalizeNewlines,
+  scanFencedBlocks,
+  isFenceClosing,
+  parseFenceOpening,
+} from "../core/fences";
 import { diagramPlaceholder, mathPlaceholder } from "../core/placeholders";
 
 export type DiagramRecord = {
@@ -158,7 +163,10 @@ function extractMath(md: string): { mdOut: string; math: MathRecord[] } {
           i = lineInfo.end;
           continue;
         }
-      } else if (fenceMarkerChar && isFenceClosing(lineInfo.text, fenceMarkerChar, fenceMarkerLen)) {
+      } else if (
+        fenceMarkerChar &&
+        isFenceClosing(lineInfo.text, fenceMarkerChar, fenceMarkerLen)
+      ) {
         inFence = false;
         fenceMarkerChar = null;
         fenceMarkerLen = 0;

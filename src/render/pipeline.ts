@@ -76,7 +76,9 @@ export function createRenderPipeline(options: PipelineOptions): RenderPipeline {
       if (!shouldContinue()) return;
 
       // Step 3: Hydrate diagram placeholders
-      const diagramImgs = Array.from(previewEl.querySelectorAll("img")).filter(isDiagramPlaceholder);
+      const diagramImgs = Array.from(previewEl.querySelectorAll("img")).filter(
+        isDiagramPlaceholder
+      );
 
       for (const img of diagramImgs) {
         if (!shouldContinue()) return;
