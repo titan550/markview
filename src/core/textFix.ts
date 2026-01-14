@@ -11,7 +11,10 @@ export function normalizeSpaces(s: string): string {
     .replace(/&nbsp;/gi, " ") // HTML entity
     .replace(/&#160;/g, " ") // Numeric entity
     .replace(/&#xA0;/gi, " ") // Hex entity
-    .replace(/[\u200B\u200C\u200D\uFEFF]/g, ""); // Zero-width chars
+    .replace(/\u200B/g, "") // Zero-width space
+    .replace(/\u200C/g, "") // Zero-width non-joiner
+    .replace(/\u200D/g, "") // Zero-width joiner
+    .replace(/\uFEFF/g, ""); // BOM
 }
 
 /**
