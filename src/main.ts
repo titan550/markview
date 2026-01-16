@@ -4,10 +4,16 @@
  */
 
 import { setupSplitPane } from "./ui/splitPane";
-import { copyHtmlFragment, copyText } from "./ui/clipboard";
+import { copyHtmlFragment, copyText, prepareHtmlForClipboard } from "./ui/clipboard";
 import { createRenderPipeline } from "./render/pipeline";
 import { autofixMarkdownDiagrams } from "./core/autofix";
-import { createTurndownService, htmlToMarkdown } from "./convert/htmlToMarkdown";
+import {
+  createTurndownService,
+  htmlToMarkdown,
+  convertFormattedHtml,
+  looksLikeMarkdown,
+  looksLikeHtml,
+} from "./convert/htmlToMarkdown";
 
 // DOM Elements
 const markdownEditor = document.getElementById("markdownEditor") as HTMLTextAreaElement;
@@ -67,6 +73,34 @@ function scheduleRender(): void {
 // Editor input handler
 markdownEditor.addEventListener("input", scheduleRender);
 
+// Paste handler - convert HTML to Markdown if pasting formatted content
+markdownEditor.addEventListener("paste", (e: ClipboardEvent) => {
+  const clipboardData = e.clipboardData;
+  if (!clipboardData) return;
+
+  const htmlContent = clipboardData.getData("text/html");
+  const plainContent = clipboardData.getData("text/plain");
+
+  if (
+    htmlContent &&
+    plainContent &&
+    !looksLikeMarkdown(plainContent) &&
+    looksLikeHtml(htmlContent)
+  ) {
+    const md = convertFormattedHtml(htmlContent);
+    e.preventDefault();
+
+    const start = markdownEditor.selectionStart;
+    const end = markdownEditor.selectionEnd;
+    const value = markdownEditor.value;
+
+    markdownEditor.value = value.substring(0, start) + md + value.substring(end);
+    markdownEditor.selectionStart = markdownEditor.selectionEnd = start + md.length;
+
+    scheduleRender();
+  }
+});
+
 // Autofix button
 autofixBtn.addEventListener("click", () => {
   const current = markdownEditor.value;
@@ -83,10 +117,10 @@ autofixBtn.addEventListener("click", () => {
 
 // Copy HTML button
 copyHtmlBtn.addEventListener("click", async () => {
-  const html = pipeline.getExportHtml();
-  const plainText = htmlPreview.innerText;
-
-  const success = await copyHtmlFragment(html, plainText);
+  const success = await copyHtmlFragment(
+    await prepareHtmlForClipboard(pipeline.getExportHtml(), htmlPreview),
+    htmlPreview.innerText
+  );
   if (success) {
     showButtonFeedback(copyHtmlBtn, "Copied!", "Copy HTML");
   } else {

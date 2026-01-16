@@ -11,13 +11,13 @@ function ensureMermaidInit(): void {
   if (!mermaid) throw new Error("Mermaid is not available");
   mermaid.initialize({
     startOnLoad: false,
-    htmlLabels: false,
-    markdownAutoWrap: false,
-    wrap: false,
+    htmlLabels: true,
+    markdownAutoWrap: true,
+    wrap: true,
     flowchart: {
-      htmlLabels: false,
+      htmlLabels: true,
       useMaxWidth: false,
-      wrappingWidth: 10000,
+      wrappingWidth: 400,
     },
   });
   mermaidInitialized = true;

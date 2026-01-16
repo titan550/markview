@@ -74,11 +74,38 @@ export function htmlToMarkdown(html: string, td?: TurndownInstance): string {
  * Check if text looks like markdown based on common patterns.
  */
 export function looksLikeMarkdown(s: string): boolean {
-  const t = (s || "").trim();
+  const t = s.trim();
   if (!t) return false;
   return (
     /(^|\n)\s{0,3}#{1,6}\s+\S/.test(t) || // Headings
     /(^|\n)\s{0,3}[-*+]\s+\S/.test(t) || // Unordered lists
     /(^|\n)\s{0,3}\d+\.\s+\S/.test(t) // Ordered lists
   );
+}
+
+/**
+ * Check if text looks like HTML.
+ */
+export function looksLikeHtml(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  return (
+    /^</.test(t) ||
+    /<!doctype\s+html/i.test(t) ||
+    /<(div|p|span|h[1-6]|ul|ol|li|table|a|img|br|strong|em|b|i)\b/i.test(t)
+  );
+}
+
+/**
+ * Convert formatted HTML (from web pages) to Markdown.
+ */
+export function convertFormattedHtml(html: string): string {
+  const td = createTurndownService();
+
+  const cleanedHtml = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+
+  return td.turndown(cleanedHtml);
 }

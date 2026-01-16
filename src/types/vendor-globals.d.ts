@@ -9,6 +9,7 @@ import type {
   DOMPurifyGlobal,
   PrismGlobal,
   MarkdownItFactory,
+  HtmlToImageGlobal,
 } from "./vendors";
 
 declare global {
@@ -23,6 +24,7 @@ declare global {
     DOMPurify?: DOMPurifyGlobal;
     Prism?: PrismGlobal;
     markdownit?: MarkdownItFactory;
+    htmlToImage?: HtmlToImageGlobal;
   }
 }
 

@@ -46,8 +46,22 @@ function sanitizeSvg(svg: string): string {
   if (window.DOMPurify) {
     result = window.DOMPurify.sanitize(result, {
       USE_PROFILES: { svg: true },
-      ADD_TAGS: ["use"],
-      ADD_ATTR: ["xlink:href"],
+      ADD_TAGS: [
+        "use",
+        "foreignObject",
+        "div",
+        "span",
+        "p",
+        "br",
+        "strong",
+        "em",
+        "b",
+        "i",
+        "ul",
+        "ol",
+        "li",
+      ],
+      ADD_ATTR: ["xlink:href", "xmlns", "requiredExtensions"],
     });
   }
 
@@ -99,16 +113,31 @@ export async function renderDiagramToEmbeddedNode(
     svg = sanitizeSvg(svg);
 
     const size = parseSvgSize(svg);
-    const dataUrl = svgToDataUrl(svg);
 
-    const img = document.createElement("img");
-    img.src = dataUrl;
-    img.width = size.width;
-    img.height = size.height;
-    img.alt = result.alt || `${canonical} diagram`;
-    img.className = result.className || "diagram-img";
+    const hasForeignObject = /<foreignObject\b/i.test(svg);
 
-    figure.appendChild(img);
+    if (hasForeignObject) {
+      const wrapper = document.createElement("div");
+      wrapper.className = result.className || "diagram-img";
+      wrapper.innerHTML = svg;
+      const svgEl = wrapper.querySelector("svg");
+      if (svgEl) {
+        svgEl.setAttribute("width", String(size.width));
+        svgEl.setAttribute("height", String(size.height));
+        svgEl.style.maxWidth = "100%";
+        svgEl.style.height = "auto";
+      }
+      figure.appendChild(wrapper);
+    } else {
+      const dataUrl = svgToDataUrl(svg);
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.width = size.width;
+      img.height = size.height;
+      img.alt = result.alt || `${canonical} diagram`;
+      img.className = result.className || "diagram-img";
+      figure.appendChild(img);
+    }
   } catch (error) {
     // Render error - show error message with source
     const message = error instanceof Error ? error.message : String(error);

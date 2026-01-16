@@ -91,3 +91,18 @@ export type MarkdownItInstance = {
 
 // markdown-it is called as a function, not with `new`
 export type MarkdownItFactory = (opts?: Record<string, unknown>) => MarkdownItInstance;
+
+export type HtmlToImageOptions = {
+  pixelRatio?: number;
+  backgroundColor?: string;
+  width?: number;
+  height?: number;
+  filter?: (node: Element) => boolean;
+};
+
+export type HtmlToImageGlobal = {
+  toPng: (node: HTMLElement, options?: HtmlToImageOptions) => Promise<string>;
+  toBlob: (node: HTMLElement, options?: HtmlToImageOptions) => Promise<Blob>;
+  toSvg: (node: HTMLElement, options?: HtmlToImageOptions) => Promise<string>;
+  toCanvas: (node: HTMLElement, options?: HtmlToImageOptions) => Promise<HTMLCanvasElement>;
+};

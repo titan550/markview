@@ -1,17 +1,17 @@
 /* markview - Markdown to HTML converter styles */
 
 :root {
-  --bg-color: #1e1e1e;
-  --text-color: #d4d4d4;
-  --border-color: #3c3c3c;
-  --accent-color: #0e639c;
-  --accent-hover: #1177bb;
-  --toolbar-bg: #252526;
-  --pane-bg: #1e1e1e;
-  --editor-bg: #1e1e1e;
-  --preview-bg: #252526;
-  --success-color: #4caf50;
-  --error-color: #f44336;
+  --bg-color: #ffffff;
+  --text-color: #24292f;
+  --border-color: #d0d7de;
+  --accent-color: #0969da;
+  --accent-hover: #0550ae;
+  --toolbar-bg: #f6f8fa;
+  --pane-bg: #ffffff;
+  --editor-bg: #ffffff;
+  --preview-bg: #ffffff;
+  --success-color: #1a7f37;
+  --error-color: #cf222e;
 }
 
 * {
@@ -102,7 +102,7 @@ body {
   letter-spacing: 0.5px;
   background: var(--toolbar-bg);
   border-bottom: 1px solid var(--border-color);
-  color: #888;
+  color: #57606a;
 }
 
 /* Resize handle */
@@ -133,7 +133,7 @@ body {
 }
 
 #markdownEditor::placeholder {
-  color: #666;
+  color: #8c959f;
 }
 
 /* Preview */
@@ -173,7 +173,7 @@ body {
 }
 
 #htmlPreview code {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(175, 184, 193, 0.2);
   padding: 2px 6px;
   border-radius: 3px;
   font-family: "Fira Code", "Consolas", "Monaco", monospace;
@@ -181,7 +181,7 @@ body {
 }
 
 #htmlPreview pre {
-  background: #1a1a1a;
+  background: #f6f8fa;
   padding: 16px;
   border-radius: 6px;
   overflow-x: auto;
@@ -205,7 +205,7 @@ body {
   margin: 16px 0;
   padding: 0 16px;
   border-left: 4px solid var(--accent-color);
-  color: #888;
+  color: #57606a;
 }
 
 #htmlPreview table {
@@ -275,7 +275,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #888;
+  color: #57606a;
 }
 
 .status.rendering::before {
@@ -313,5 +313,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #8c959f;
 }

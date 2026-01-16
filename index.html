@@ -12,7 +12,7 @@
     <!-- Prism syntax highlighting -->
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css"
+      href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism.min.css"
     />
 
     <!-- App styles -->
@@ -71,6 +71,9 @@
     <!-- JSON5 (for flexible JSON parsing) -->
     <script src="https://cdn.jsdelivr.net/npm/json5@2.2.3/dist/index.min.js"></script>
 
+    <!-- html-to-image (for clipboard copy with foreignObject SVGs) -->
+    <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+
     <!-- MathJax -->
     <script>
       MathJax = {
@@ -79,8 +82,12 @@
             ["$", "$"],
             ["\\(", "\\)"],
           ],
+          displayMath: [
+            ["$$", "$$"],
+            ["\\[", "\\]"],
+          ],
         },
-        svg: { fontCache: "global" },
+        svg: { fontCache: "none" },
         startup: { typeset: false },
       };
     </script>
