@@ -10,6 +10,7 @@ import {
   parseFenceOpening,
 } from "../core/fences";
 import { diagramPlaceholder, mathPlaceholder } from "../core/placeholders";
+import { DIAGRAM_LANGS } from "../core/diagramLangs";
 
 export type DiagramRecord = {
   id: string;
@@ -29,19 +30,6 @@ export type ParseResult = {
   diagrams: DiagramRecord[];
   math: MathRecord[];
 };
-
-// Diagram languages
-const DIAGRAM_LANGS = new Set([
-  "mermaid",
-  "dot",
-  "graphviz",
-  "gv",
-  "wavedrom",
-  "wave",
-  "wavejson",
-  "vega-lite",
-  "vl",
-]);
 
 /**
  * Check if inline math expression should be rendered.

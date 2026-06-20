@@ -1,2 +1,8 @@
 # Generated test artifacts
 test-results
+
+# One-off QR-parameter-search experiments (not part of the app/build)
+scripts
+
+# Editor / harness config
+.claude

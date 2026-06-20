@@ -24,6 +24,14 @@
       <button id="autofixBtn" type="button">Autofix Diagrams</button>
       <button id="copyHtmlBtn" type="button">Copy HTML</button>
       <button id="copyMdBtn" type="button">Copy as Markdown</button>
+      <label class="toggle-label">
+        <input type="checkbox" id="embedSourceToggle" checked />
+        Embed source
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="embedQrToggle" checked />
+        QR fallback
+      </label>
       <span id="status" class="status"></span>
     </div>
 
@@ -73,6 +81,15 @@
 
     <!-- html-to-image (for clipboard copy with foreignObject SVGs) -->
     <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+
+    <!-- pako (for compression) -->
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+
+    <!-- qrcode-generator (for QR code generation) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+
+    <!-- jsQR (for QR code decoding) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
     <!-- MathJax -->
     <script>

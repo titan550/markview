@@ -25,37 +25,27 @@ export function setupSplitPane(options: SplitPaneOptions): void {
 
   let isDragging = false;
 
-  function onMouseDown(e: MouseEvent): void {
-    isDragging = true;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    e.preventDefault();
-  }
-
-  function onMouseMove(e: MouseEvent): void {
-    if (!isDragging) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const handleWidth = handle.offsetWidth;
-    const maxWidth = containerRect.width - minWidth - handleWidth;
-    const newWidth = Math.max(minWidth, Math.min(e.clientX - containerRect.left, maxWidth));
-
+  function resizeTo(clientX: number): void {
+    const rect = container.getBoundingClientRect();
+    const maxWidth = rect.width - minWidth - handle.offsetWidth;
+    const newWidth = Math.max(minWidth, Math.min(clientX - rect.left, maxWidth));
     leftPane.style.width = `${newWidth}px`;
   }
 
-  function onMouseUp(): void {
-    if (isDragging) {
-      isDragging = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-
-      // Save width to localStorage
-      try {
-        localStorage.setItem(storageKey, leftPane.style.width);
-      } catch {
-        // Ignore storage errors
-      }
+  function persistWidth(): void {
+    try {
+      localStorage.setItem(storageKey, leftPane.style.width);
+    } catch {
+      // Ignore storage errors
     }
+  }
+
+  function endDrag(): void {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    persistWidth();
   }
 
   // Restore saved width
@@ -68,34 +58,24 @@ export function setupSplitPane(options: SplitPaneOptions): void {
     // Ignore storage errors
   }
 
-  handle.addEventListener("mousedown", onMouseDown);
-  document.addEventListener("mousemove", onMouseMove);
-  document.addEventListener("mouseup", onMouseUp);
+  handle.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (isDragging) resizeTo(e.clientX);
+  });
+  document.addEventListener("mouseup", endDrag);
 
   // Touch support for mobile
   handle.addEventListener("touchstart", (e) => {
     isDragging = true;
     e.preventDefault();
   });
-
   document.addEventListener("touchmove", (e) => {
-    if (!isDragging) return;
-    const touch = e.touches[0];
-    const containerRect = container.getBoundingClientRect();
-    const handleWidth = handle.offsetWidth;
-    const maxWidth = containerRect.width - minWidth - handleWidth;
-    const newWidth = Math.max(minWidth, Math.min(touch.clientX - containerRect.left, maxWidth));
-    leftPane.style.width = `${newWidth}px`;
+    if (isDragging) resizeTo(e.touches[0].clientX);
   });
-
-  document.addEventListener("touchend", () => {
-    if (isDragging) {
-      isDragging = false;
-      try {
-        localStorage.setItem(storageKey, leftPane.style.width);
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  });
+  document.addEventListener("touchend", endDrag);
 }

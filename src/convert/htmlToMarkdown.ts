@@ -4,6 +4,7 @@
  * with diagram fences and math expressions preserved.
  */
 
+import { base64ToUtf8 } from "../core/base64utf8";
 import type { TurndownInstance, TurndownRule } from "../types/vendors";
 
 export type { TurndownInstance, TurndownRule };
@@ -36,7 +37,7 @@ export function createTurndownService(): TurndownInstance {
       const lang = node.getAttribute("data-diagram") || "mermaid";
       const sourceBase64 = node.getAttribute("data-source-base64") || "";
       try {
-        const source = atob(sourceBase64);
+        const source = base64ToUtf8(sourceBase64);
         return `\n\`\`\`${lang}\n${source}\n\`\`\`\n`;
       } catch {
         return `\n\`\`\`${lang}\n<!-- Error decoding diagram source -->\n\`\`\`\n`;

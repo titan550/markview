@@ -7,6 +7,8 @@ import { setupSplitPane } from "./ui/splitPane";
 import { copyHtmlFragment, copyText, prepareHtmlForClipboard } from "./ui/clipboard";
 import { createRenderPipeline } from "./render/pipeline";
 import { autofixMarkdownDiagrams } from "./core/autofix";
+import { encodePayload, decodePayload } from "./core/markviewPayload";
+import { planQrChunks, compositeQrFooter, decodeQrFromImage } from "./core/qrEmbed";
 import {
   createTurndownService,
   htmlToMarkdown,
@@ -14,6 +16,29 @@ import {
   looksLikeMarkdown,
   looksLikeHtml,
 } from "./convert/htmlToMarkdown";
+import {
+  extractClipboardData,
+  mightContainDiagrams,
+  processClipboardData,
+} from "./convert/clipboardPaste";
+
+// Expose internals for E2E tests (dev server only; stripped from production builds).
+declare global {
+  interface Window {
+    __test_encodePayload?: typeof encodePayload;
+    __test_decodePayload?: typeof decodePayload;
+    __test_planQrChunks?: typeof planQrChunks;
+    __test_compositeQrFooter?: typeof compositeQrFooter;
+    __test_decodeQrFromImage?: typeof decodeQrFromImage;
+  }
+}
+if (import.meta.env.DEV) {
+  window.__test_encodePayload = encodePayload;
+  window.__test_decodePayload = decodePayload;
+  window.__test_planQrChunks = planQrChunks;
+  window.__test_compositeQrFooter = compositeQrFooter;
+  window.__test_decodeQrFromImage = decodeQrFromImage;
+}
 
 // DOM Elements
 const markdownEditor = document.getElementById("markdownEditor") as HTMLTextAreaElement;
@@ -25,6 +50,8 @@ const resizeHandle = document.getElementById("resizeHandle") as HTMLElement;
 const autofixBtn = document.getElementById("autofixBtn") as HTMLButtonElement;
 const copyHtmlBtn = document.getElementById("copyHtmlBtn") as HTMLButtonElement;
 const copyMdBtn = document.getElementById("copyMdBtn") as HTMLButtonElement;
+const embedSourceToggle = document.getElementById("embedSourceToggle") as HTMLInputElement;
+const embedQrToggle = document.getElementById("embedQrToggle") as HTMLInputElement;
 const statusEl = document.getElementById("status") as HTMLElement;
 
 // Setup split pane
@@ -73,31 +100,48 @@ function scheduleRender(): void {
 // Editor input handler
 markdownEditor.addEventListener("input", scheduleRender);
 
-// Paste handler - convert HTML to Markdown if pasting formatted content
+// Paste handler: recover diagram sources from embedded metadata / QR codes,
+// and convert pasted formatted HTML to Markdown.
 markdownEditor.addEventListener("paste", (e: ClipboardEvent) => {
-  const clipboardData = e.clipboardData;
-  if (!clipboardData) return;
+  // Extract clipboard data synchronously — it is cleared after the first await.
+  const snapshot = extractClipboardData(e);
+  if (!snapshot) return;
 
-  const htmlContent = clipboardData.getData("text/html");
-  const plainContent = clipboardData.getData("text/plain");
+  const start = markdownEditor.selectionStart;
+  const end = markdownEditor.selectionEnd;
+  const value = markdownEditor.value;
 
-  if (
-    htmlContent &&
-    plainContent &&
-    !looksLikeMarkdown(plainContent) &&
-    looksLikeHtml(htmlContent)
-  ) {
-    const md = convertFormattedHtml(htmlContent);
-    e.preventDefault();
-
-    const start = markdownEditor.selectionStart;
-    const end = markdownEditor.selectionEnd;
-    const value = markdownEditor.value;
-
+  const insertMarkdown = (md: string) => {
     markdownEditor.value = value.substring(0, start) + md + value.substring(end);
     markdownEditor.selectionStart = markdownEditor.selectionEnd = start + md.length;
-
     scheduleRender();
+  };
+
+  // Convert pasted formatted HTML (e.g. from a web page) to Markdown, else null.
+  const formattedHtmlToMarkdown = (): string | null =>
+    snapshot.htmlContent &&
+    snapshot.plainContent &&
+    !looksLikeMarkdown(snapshot.plainContent) &&
+    looksLikeHtml(snapshot.htmlContent)
+      ? convertFormattedHtml(snapshot.htmlContent)
+      : null;
+
+  // Images may carry recoverable diagram sources — process asynchronously.
+  if (mightContainDiagrams(snapshot)) {
+    e.preventDefault();
+    processClipboardData(snapshot, turndown)
+      .then((recoveredMd) => {
+        const md = recoveredMd || formattedHtmlToMarkdown() || snapshot.plainContent;
+        if (md) insertMarkdown(md);
+      })
+      .catch((err) => console.error("Paste processing failed:", err));
+    return;
+  }
+
+  const md = formattedHtmlToMarkdown();
+  if (md) {
+    e.preventDefault();
+    insertMarkdown(md);
   }
 });
 
@@ -118,7 +162,10 @@ autofixBtn.addEventListener("click", () => {
 // Copy HTML button
 copyHtmlBtn.addEventListener("click", async () => {
   const success = await copyHtmlFragment(
-    await prepareHtmlForClipboard(pipeline.getExportHtml(), htmlPreview),
+    await prepareHtmlForClipboard(pipeline.getExportHtml(), htmlPreview, {
+      embedSource: embedSourceToggle.checked,
+      embedQr: embedQrToggle.checked,
+    }),
     htmlPreview.innerText
   );
   if (success) {
@@ -181,6 +228,48 @@ markdownEditor.addEventListener("input", () => {
   saveTimeout = window.setTimeout(saveContent, 1000);
 });
 
+// Embed settings persistence
+function loadEmbedSettings(): void {
+  try {
+    const embedSource = localStorage.getItem("markview-embed-source");
+    const embedQr = localStorage.getItem("markview-embed-qr");
+
+    // Default to enabled if not set
+    embedSourceToggle.checked = embedSource !== "0";
+    embedQrToggle.checked = embedQr !== "0";
+
+    // Disable QR toggle if source embedding is off
+    updateQrToggleState();
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function saveEmbedSettings(): void {
+  try {
+    localStorage.setItem("markview-embed-source", embedSourceToggle.checked ? "1" : "0");
+    localStorage.setItem("markview-embed-qr", embedQrToggle.checked ? "1" : "0");
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function updateQrToggleState(): void {
+  if (!embedSourceToggle.checked) {
+    embedQrToggle.checked = false;
+    embedQrToggle.disabled = true;
+  } else {
+    embedQrToggle.disabled = false;
+  }
+}
+
+embedSourceToggle.addEventListener("change", () => {
+  updateQrToggleState();
+  saveEmbedSettings();
+});
+
+embedQrToggle.addEventListener("change", saveEmbedSettings);
+
 // Default sample content
 const SAMPLE_CONTENT = `# Welcome to markview
 
@@ -222,6 +311,7 @@ Try editing this content or paste your own markdown!
 
 // Initialize
 restoreContent();
+loadEmbedSettings();
 if (!markdownEditor.value.trim()) {
   markdownEditor.value = SAMPLE_CONTENT;
 }

@@ -106,3 +106,39 @@ export type HtmlToImageGlobal = {
   toSvg: (node: HTMLElement, options?: HtmlToImageOptions) => Promise<string>;
   toCanvas: (node: HTMLElement, options?: HtmlToImageOptions) => Promise<HTMLCanvasElement>;
 };
+
+export type PakoGlobal = {
+  deflateRaw: (data: Uint8Array, options?: { level?: number }) => Uint8Array;
+  inflateRaw: (data: Uint8Array) => Uint8Array;
+};
+
+export type QRCode = {
+  addData: (data: string) => void;
+  getModuleCount: () => number;
+  isDark: (row: number, col: number) => boolean;
+  make: () => void;
+};
+
+export type QRCodeGeneratorFn = (typeNumber: number, errorCorrection: string) => QRCode;
+
+export interface QRCodeGeneratorGlobal extends QRCodeGeneratorFn {
+  stringToBytes: (s: string) => number[];
+}
+
+export type JsQRCode = {
+  data: string;
+  binaryData: number[];
+  location: {
+    topLeftCorner: { x: number; y: number };
+    topRightCorner: { x: number; y: number };
+    bottomLeftCorner: { x: number; y: number };
+    bottomRightCorner: { x: number; y: number };
+  };
+};
+
+export type JsQRFn = (
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  options?: { inversionAttempts?: "dontInvert" | "onlyInvert" | "attemptBoth" }
+) => JsQRCode | null;

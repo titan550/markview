@@ -6,19 +6,7 @@
 import { normalizeNewlines, scanFencedBlocks } from "./fences";
 import { sanitizeMermaidSourceLabels } from "./mermaidSanitize";
 import { normalizeText } from "./textFix";
-
-// Diagram languages that support text normalization
-const DIAGRAM_LANGS = new Set([
-  "mermaid",
-  "dot",
-  "graphviz",
-  "gv",
-  "wavedrom",
-  "wave",
-  "wavejson",
-  "vega-lite",
-  "vl",
-]);
+import { DIAGRAM_LANGS } from "./diagramLangs";
 
 /**
  * Apply autofix to diagram fences in markdown.

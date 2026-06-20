@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>QR Parameter Space Search</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1400px; margin: 0 auto; }
+    .controls { background: #f5f5f5; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+    .controls label { display: inline-block; margin-right: 20px; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 12px; }
+    th { background: #f0f0f0; position: sticky; top: 0; }
+    .pass { background: #c8ffc8; }
+    .fail { background: #ffc8c8; }
+    .boundary { background: #ffffc8; }
+    #results { max-height: 600px; overflow-y: auto; }
+    #summary { background: #e8f4ff; padding: 15px; margin: 20px 0; border-radius: 8px; }
+    #heatmap { margin-top: 20px; }
+    .heatmap-row { display: flex; }
+    .heatmap-cell { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+    .progress { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>QR Parameter Space Search</h1>
+  <p>Find the minimum viable QR parameters by testing decode success across the parameter space.</p>
+
+  <div class="controls">
+    <h3>Test Parameters</h3>
+    <label>
+      QR Sizes (px):
+      <input type="text" id="sizes" value="48,56,64,72,80,96,112,128" size="30">
+    </label>
+    <label>
+      Data Lengths (chars):
+      <input type="text" id="dataLengths" value="30,50,70,90,110,130" size="25">
+    </label>
+    <label>
+      ECC Levels:
+      <input type="text" id="eccLevels" value="L,M,Q" size="10">
+    </label>
+    <br><br>
+    <label>
+      JPEG Qualities (100=PNG):
+      <input type="text" id="jpegQualities" value="100,90,80,70,60" size="20">
+    </label>
+    <label>
+      Scale Factors:
+      <input type="text" id="scaleFactors" value="1.0,0.75,0.5" size="15">
+    </label>
+    <label>
+      <input type="checkbox" id="addBlur"> Add slight blur (anti-aliasing sim)
+    </label>
+    <label>
+      <input type="checkbox" id="reEncode"> Re-encode cycle (simulate Word/Pages)
+    </label>
+    <br><br>
+    <button onclick="runSearch()">Run Parameter Search</button>
+    <button onclick="runQuickSearch()">Quick Search (fewer params)</button>
+    <button onclick="runRealWorldTest()">Real-World Simulation</button>
+    <button onclick="exportResults()">Export JSON</button>
+  </div>
+
+  <div class="progress" id="progress"></div>
+  <div id="summary"></div>
+  <div id="heatmap"></div>
+  <div id="results"></div>
+
+  <script>
+    // Generate test data of specific length
+    function generateTestData(length) {
+      const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let result = "MV1/ABCD1234/1/1:";
+      while (result.length < length) {
+        result += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return result.substring(0, length);
+    }
+
+    // Render QR to canvas
+    function renderQR(data, size, ecc) {
+      const qr = qrcode(0, ecc);
+      qr.addData(data);
+      qr.make();
+
+      const moduleCount = qr.getModuleCount();
+      const totalModules = moduleCount + 4; // quiet zone
+      const cellSize = size / totalModules;
+      const modulePx = cellSize;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+
+      const offset = cellSize * 2;
+      ctx.fillStyle = '#000000';
+
+      for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+          if (qr.isDark(row, col)) {
+            ctx.fillRect(
+              Math.floor(offset + col * cellSize),
+              Math.floor(offset + row * cellSize),
+              Math.ceil(cellSize),
+              Math.ceil(cellSize)
+            );
+          }
+        }
+      }
+
+      return { canvas, moduleCount, modulePx };
+    }
+
+    // Apply degradation (JPEG compression, scaling)
+    async function degradeImage(canvas, jpegQuality, scaleFactor) {
+      return new Promise((resolve) => {
+        const isJpeg = jpegQuality < 100;
+        const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+        const quality = jpegQuality / 100;
+
+        // First, convert to blob with compression
+        canvas.toBlob((blob) => {
+          const img = new Image();
+          img.onload = () => {
+            // Scale if needed
+            const newWidth = Math.round(canvas.width * scaleFactor);
+            const newHeight = Math.round(canvas.height * scaleFactor);
+
+            const canvas2 = document.createElement('canvas');
+            canvas2.width = newWidth;
+            canvas2.height = newHeight;
+            const ctx2 = canvas2.getContext('2d');
+
+            // Use pixelated scaling for downscale, then back up
+            ctx2.imageSmoothingEnabled = true;
+            ctx2.imageSmoothingQuality = 'medium';
+            ctx2.drawImage(img, 0, 0, newWidth, newHeight);
+
+            // If scaled down, scale back up for decoding
+            if (scaleFactor < 1) {
+              const canvas3 = document.createElement('canvas');
+              canvas3.width = canvas.width;
+              canvas3.height = canvas.height;
+              const ctx3 = canvas3.getContext('2d');
+              ctx3.imageSmoothingEnabled = true;
+              ctx3.drawImage(canvas2, 0, 0, canvas.width, canvas.height);
+              resolve(canvas3);
+            } else {
+              resolve(canvas2);
+            }
+          };
+          img.src = URL.createObjectURL(blob);
+        }, mimeType, quality);
+      });
+    }
+
+    // Try to decode QR from canvas
+    function tryDecode(canvas, expectedData) {
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = jsQR(imageData.data, canvas.width, canvas.height, {
+        inversionAttempts: "attemptBoth"
+      });
+      return result && result.data === expectedData;
+    }
+
+    // Main search function
+    async function runSearch() {
+      const sizes = document.getElementById('sizes').value.split(',').map(s => parseInt(s.trim()));
+      const dataLengths = document.getElementById('dataLengths').value.split(',').map(s => parseInt(s.trim()));
+      const eccLevels = document.getElementById('eccLevels').value.split(',').map(s => s.trim());
+      const jpegQualities = document.getElementById('jpegQualities').value.split(',').map(s => parseInt(s.trim()));
+      const scaleFactors = document.getElementById('scaleFactors').value.split(',').map(s => parseFloat(s.trim()));
+
+      const results = [];
+      const totalTests = sizes.length * dataLengths.length * eccLevels.length * jpegQualities.length * scaleFactors.length;
+      let completed = 0;
+
+      document.getElementById('progress').innerHTML = `Running 0/${totalTests} tests...`;
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('summary').innerHTML = '';
+
+      for (const size of sizes) {
+        for (const dataLen of dataLengths) {
+          for (const ecc of eccLevels) {
+            for (const jpegQ of jpegQualities) {
+              for (const scale of scaleFactors) {
+                const testData = generateTestData(dataLen);
+
+                try {
+                  const { canvas, moduleCount, modulePx } = renderQR(testData, size, ecc);
+                  const degraded = await degradeImage(canvas, jpegQ, scale);
+                  const success = tryDecode(degraded, testData);
+
+                  results.push({
+                    size,
+                    dataLen,
+                    ecc,
+                    jpegQ,
+                    scale,
+                    moduleCount,
+                    modulePx: modulePx.toFixed(2),
+                    success
+                  });
+                } catch (e) {
+                  results.push({
+                    size,
+                    dataLen,
+                    ecc,
+                    jpegQ,
+                    scale,
+                    moduleCount: 0,
+                    modulePx: 0,
+                    success: false,
+                    error: e.message
+                  });
+                }
+
+                completed++;
+                if (completed % 10 === 0) {
+                  document.getElementById('progress').innerHTML = `Running ${completed}/${totalTests} tests...`;
+                  await new Promise(r => setTimeout(r, 0)); // Allow UI update
+                }
+              }
+            }
+          }
+        }
+      }
+
+      document.getElementById('progress').innerHTML = `Completed ${totalTests} tests.`;
+      displayResults(results);
+    }
+
+    // Quick search with fewer parameters
+    async function runQuickSearch() {
+      document.getElementById('sizes').value = '56,64,72,80,96';
+      document.getElementById('dataLengths').value = '40,60,80,100';
+      document.getElementById('eccLevels').value = 'L,M';
+      document.getElementById('jpegQualities').value = '100,80';
+      document.getElementById('scaleFactors').value = '1.0';
+      await runSearch();
+    }
+
+    function displayResults(results) {
+      // Find boundaries
+      const boundaries = findBoundaries(results);
+
+      // Summary
+      let summaryHtml = '<h3>Key Findings</h3>';
+      summaryHtml += '<table><tr><th>Condition</th><th>Min Size</th><th>Min Module Px</th></tr>';
+
+      const conditions = [
+        { label: 'PNG, no scaling, 40 chars', filter: r => r.jpegQ === 100 && r.scale === 1 && r.dataLen <= 50 },
+        { label: 'PNG, no scaling, 80 chars', filter: r => r.jpegQ === 100 && r.scale === 1 && r.dataLen <= 90 },
+        { label: 'JPEG 80%, no scaling', filter: r => r.jpegQ === 80 && r.scale === 1 },
+        { label: 'PNG, 75% scale', filter: r => r.jpegQ === 100 && r.scale === 0.75 },
+        { label: 'PNG, 50% scale', filter: r => r.jpegQ === 100 && r.scale === 0.5 },
+      ];
+
+      for (const cond of conditions) {
+        const filtered = results.filter(r => r.success && cond.filter(r));
+        if (filtered.length > 0) {
+          const minSize = Math.min(...filtered.map(r => r.size));
+          const minModulePx = Math.min(...filtered.map(r => parseFloat(r.modulePx)));
+          summaryHtml += `<tr><td>${cond.label}</td><td>${minSize}px</td><td>${minModulePx.toFixed(2)}px</td></tr>`;
+        } else {
+          summaryHtml += `<tr><td>${cond.label}</td><td colspan="2">No success</td></tr>`;
+        }
+      }
+      summaryHtml += '</table>';
+
+      // Recommendations
+      summaryHtml += '<h3>Recommended Parameters</h3>';
+      const safeResults = results.filter(r => r.success && r.jpegQ <= 80 && r.scale >= 0.75);
+      if (safeResults.length > 0) {
+        const minSafeModulePx = Math.min(...safeResults.map(r => parseFloat(r.modulePx)));
+        summaryHtml += `<p><strong>MIN_MODULE_PX:</strong> ${Math.ceil(minSafeModulePx * 10) / 10} (for JPEG 80% tolerance)</p>`;
+      }
+
+      document.getElementById('summary').innerHTML = summaryHtml;
+
+      // Heatmap: Size vs DataLen for each ECC
+      let heatmapHtml = '<h3>Success Heatmap (Size × Data Length)</h3>';
+      const eccLevels = [...new Set(results.map(r => r.ecc))];
+      const sizes = [...new Set(results.map(r => r.size))].sort((a, b) => a - b);
+      const dataLens = [...new Set(results.map(r => r.dataLen))].sort((a, b) => a - b);
+
+      for (const ecc of eccLevels) {
+        heatmapHtml += `<h4>ECC ${ecc} (PNG, no scaling)</h4>`;
+        heatmapHtml += '<div class="heatmap-row"><div class="heatmap-cell"></div>';
+        for (const size of sizes) {
+          heatmapHtml += `<div class="heatmap-cell" style="font-weight:bold">${size}</div>`;
+        }
+        heatmapHtml += '</div>';
+
+        for (const dataLen of dataLens) {
+          heatmapHtml += `<div class="heatmap-row"><div class="heatmap-cell" style="font-weight:bold">${dataLen}</div>`;
+          for (const size of sizes) {
+            const r = results.find(x => x.ecc === ecc && x.size === size && x.dataLen === dataLen && x.jpegQ === 100 && x.scale === 1);
+            const color = r ? (r.success ? '#4a4' : '#a44') : '#888';
+            const symbol = r ? (r.success ? '✓' : '✗') : '?';
+            heatmapHtml += `<div class="heatmap-cell" style="background:${color};color:white">${symbol}</div>`;
+          }
+          heatmapHtml += '</div>';
+        }
+      }
+      document.getElementById('heatmap').innerHTML = heatmapHtml;
+
+      // Full results table
+      let tableHtml = '<h3>Full Results</h3><table>';
+      tableHtml += '<tr><th>Size</th><th>Data</th><th>ECC</th><th>JPEG</th><th>Scale</th><th>Modules</th><th>Px/Mod</th><th>Result</th></tr>';
+
+      for (const r of results) {
+        const cls = r.success ? 'pass' : 'fail';
+        tableHtml += `<tr class="${cls}">`;
+        tableHtml += `<td>${r.size}px</td>`;
+        tableHtml += `<td>${r.dataLen}</td>`;
+        tableHtml += `<td>${r.ecc}</td>`;
+        tableHtml += `<td>${r.jpegQ}</td>`;
+        tableHtml += `<td>${r.scale}</td>`;
+        tableHtml += `<td>${r.moduleCount}</td>`;
+        tableHtml += `<td>${r.modulePx}</td>`;
+        tableHtml += `<td>${r.success ? '✓' : '✗'}</td>`;
+        tableHtml += '</tr>';
+      }
+      tableHtml += '</table>';
+      document.getElementById('results').innerHTML = tableHtml;
+    }
+
+    function findBoundaries(results) {
+      // Find the boundary where success transitions to failure
+      const boundaries = [];
+
+      // Group by all params except size
+      const groups = {};
+      for (const r of results) {
+        const key = `${r.dataLen}_${r.ecc}_${r.jpegQ}_${r.scale}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+      }
+
+      for (const key in groups) {
+        const group = groups[key].sort((a, b) => a.size - b.size);
+        for (let i = 0; i < group.length - 1; i++) {
+          if (!group[i].success && group[i + 1].success) {
+            boundaries.push({
+              ...group[i + 1],
+              boundaryType: 'min-size'
+            });
+          }
+        }
+      }
+
+      return boundaries;
+    }
+
+    // Real-world simulation: tests parameters under conditions similar to Word/Pages
+    async function runRealWorldTest() {
+      document.getElementById('sizes').value = '64,72,80,88,96,104,112,120,128';
+      document.getElementById('dataLengths').value = '40,60,80,100,120';
+      document.getElementById('eccLevels').value = 'L,M,Q';
+      document.getElementById('jpegQualities').value = '100,85,70';  // PNG, light JPEG, heavy JPEG
+      document.getElementById('scaleFactors').value = '1.0,0.8';     // No scale, slight downscale
+      document.getElementById('addBlur').checked = true;
+      document.getElementById('reEncode').checked = true;
+      await runSearch();
+    }
+
+    // Store last results for export
+    let lastResults = [];
+
+    // Modified displayResults to store results
+    const originalDisplayResults = displayResults;
+    displayResults = function(results) {
+      lastResults = results;
+      originalDisplayResults(results);
+    };
+
+    function exportResults() {
+      if (lastResults.length === 0) {
+        alert('No results to export. Run a search first.');
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(lastResults, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'qr-parameter-results.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // Enhanced degradation with blur and re-encode
+    const originalDegradeImage = degradeImage;
+    degradeImage = async function(canvas, jpegQuality, scaleFactor) {
+      let result = await originalDegradeImage(canvas, jpegQuality, scaleFactor);
+
+      const addBlur = document.getElementById('addBlur').checked;
+      const reEncode = document.getElementById('reEncode').checked;
+
+      if (addBlur) {
+        // Apply slight blur to simulate anti-aliasing
+        const ctx = result.getContext('2d');
+        ctx.filter = 'blur(0.5px)';
+        const temp = document.createElement('canvas');
+        temp.width = result.width;
+        temp.height = result.height;
+        const tempCtx = temp.getContext('2d');
+        tempCtx.filter = 'blur(0.5px)';
+        tempCtx.drawImage(result, 0, 0);
+        ctx.filter = 'none';
+        ctx.clearRect(0, 0, result.width, result.height);
+        ctx.drawImage(temp, 0, 0);
+      }
+
+      if (reEncode) {
+        // Simulate Word/Pages re-encoding: PNG -> JPEG 85% -> PNG
+        result = await new Promise((resolve) => {
+          result.toBlob((blob) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas2 = document.createElement('canvas');
+              canvas2.width = result.width;
+              canvas2.height = result.height;
+              const ctx2 = canvas2.getContext('2d');
+              ctx2.drawImage(img, 0, 0);
+              resolve(canvas2);
+            };
+            img.src = URL.createObjectURL(blob);
+          }, 'image/jpeg', 0.85);
+        });
+      }
+
+      return result;
+    };
+  </script>
+</body>
+</html>

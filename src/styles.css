@@ -69,6 +69,32 @@ body {
   cursor: not-allowed;
 }
 
+#toolbar .toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #57606a;
+  cursor: pointer;
+}
+
+#toolbar .toggle-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+#toolbar .toggle-label input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#toolbar .toggle-label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Container */
 #container {
   display: flex;

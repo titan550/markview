@@ -5,6 +5,7 @@
 
 import { sanitizeSvgForXml } from "../core/svgSanitize";
 import { svgToDataUrl, parseSvgSize } from "../core/svg";
+import { utf8ToBase64 } from "../core/base64utf8";
 import { mermaidRenderer } from "../renderers/mermaid";
 import { dotRenderer } from "../renderers/dot";
 import { wavedromRenderer } from "../renderers/wavedrom";
@@ -86,16 +87,10 @@ export async function renderDiagramToEmbeddedNode(
   const figure = document.createElement("figure");
   figure.className = `diagram diagram-${canonical}`;
   figure.setAttribute("data-diagram", canonical);
-  figure.setAttribute("data-source-base64", btoa(unescape(encodeURIComponent(content))));
+  figure.setAttribute("data-source-base64", utf8ToBase64(content));
 
   if (!renderer) {
-    // Unknown renderer - show error
-    figure.innerHTML = `
-      <div class="diagram-error">
-        <p>Unknown diagram type: ${lang}</p>
-        <pre><code>${escapeHtml(content)}</code></pre>
-      </div>
-    `;
+    setDiagramError(figure, `Unknown diagram type: ${escapeHtml(lang)}`, content);
     return figure;
   }
 
@@ -139,14 +134,12 @@ export async function renderDiagramToEmbeddedNode(
       figure.appendChild(img);
     }
   } catch (error) {
-    // Render error - show error message with source
     const message = error instanceof Error ? error.message : String(error);
-    figure.innerHTML = `
-      <div class="diagram-error">
-        <p>Error rendering ${lang} diagram: ${escapeHtml(message)}</p>
-        <pre><code>${escapeHtml(content)}</code></pre>
-      </div>
-    `;
+    setDiagramError(
+      figure,
+      `Error rendering ${escapeHtml(lang)} diagram: ${escapeHtml(message)}`,
+      content
+    );
   }
 
   return figure;
@@ -173,4 +166,17 @@ function escapeHtml(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * Render an error message plus the original source into a diagram figure.
+ * `messageHtml` is treated as trusted HTML; escape any interpolated values.
+ */
+function setDiagramError(figure: HTMLElement, messageHtml: string, content: string): void {
+  figure.innerHTML = `
+    <div class="diagram-error">
+      <p>${messageHtml}</p>
+      <pre><code>${escapeHtml(content)}</code></pre>
+    </div>
+  `;
 }

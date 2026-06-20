@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>QR Size Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .test { display: inline-block; margin: 5px; text-align: center; padding: 5px; }
+    .pass { background: #d4ffd4; }
+    .fail { background: #ffd4d4; }
+    canvas { border: 1px solid #ccc; display: block; margin: 5px auto; }
+    h2 { margin-top: 20px; }
+    .summary { background: #ffffcc; padding: 10px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h1>QR Minimum Size Test</h1>
+  <p>Testing what's the smallest QR that jsQR can reliably decode...</p>
+  <div id="summary" class="summary"></div>
+  <div id="results"></div>
+
+  <script>
+    // Realistic test data - similar to what we'd encode
+    const testCases = [
+      { name: "Short chunk", data: "MV1/ABCD1234/1/1:0123456789ABCDEF" },  // ~35 chars
+      { name: "Medium chunk", data: "MV1/ABCD1234/1/2:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123" }, // ~60 chars
+      { name: "Long chunk", data: "MV1/ABCD1234/1/2:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP" }, // ~85 chars
+    ];
+
+    const sizes = [48, 56, 64, 72, 80, 88, 96, 112, 128];
+    const eccLevels = ['L', 'M', 'Q'];
+    const results = document.getElementById('results');
+    const summary = document.getElementById('summary');
+
+    let minWorking = {};
+
+    for (const testCase of testCases) {
+      const section = document.createElement('div');
+      section.innerHTML = '<h2>' + testCase.name + ' (' + testCase.data.length + ' chars)</h2>';
+      results.appendChild(section);
+
+      for (const ecc of eccLevels) {
+        const row = document.createElement('div');
+        row.innerHTML = '<strong>ECC ' + ecc + ':</strong> ';
+        section.appendChild(row);
+
+        for (const size of sizes) {
+          const div = document.createElement('div');
+          div.className = 'test';
+
+          try {
+            // Generate QR
+            const qr = qrcode(0, ecc);
+            qr.addData(testCase.data);
+            qr.make();
+
+            const moduleCount = qr.getModuleCount();
+            const totalModules = moduleCount + 4; // +4 for quiet zone
+            const modulePx = size / totalModules;
+
+            // Render to canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size);
+
+            const cellSize = size / totalModules;
+            const offset = cellSize * 2;
+
+            ctx.fillStyle = '#000000';
+            for (let row = 0; row < moduleCount; row++) {
+              for (let col = 0; col < moduleCount; col++) {
+                if (qr.isDark(row, col)) {
+                  ctx.fillRect(
+                    Math.floor(offset + col * cellSize),
+                    Math.floor(offset + row * cellSize),
+                    Math.ceil(cellSize),
+                    Math.ceil(cellSize)
+                  );
+                }
+              }
+            }
+
+            // Try to decode
+            const imageData = ctx.getImageData(0, 0, size, size);
+            const decoded = jsQR(imageData.data, size, size, { inversionAttempts: "dontInvert" });
+
+            const passed = decoded && decoded.data === testCase.data;
+            div.className = 'test ' + (passed ? 'pass' : 'fail');
+
+            if (passed && !minWorking[testCase.name + '_' + ecc]) {
+              minWorking[testCase.name + '_' + ecc] = { size, modulePx, moduleCount };
+            }
+
+            div.innerHTML =
+              size + 'px<br>' +
+              modulePx.toFixed(1) + 'px/mod<br>' +
+              (passed ? '✓' : '✗');
+
+            div.appendChild(canvas);
+          } catch (e) {
+            div.className = 'test fail';
+            div.innerHTML = size + 'px<br>ERROR';
+          }
+
+          row.appendChild(div);
+        }
+      }
+    }
+
+    // Show summary
+    let summaryHtml = '<h3>Minimum Working Sizes:</h3><ul>';
+    for (const key in minWorking) {
+      const m = minWorking[key];
+      summaryHtml += '<li>' + key + ': ' + m.size + 'px (' + m.modulePx.toFixed(1) + 'px/module, ' + m.moduleCount + ' modules)</li>';
+    }
+    summaryHtml += '</ul>';
+    summaryHtml += '<h3>Recommendation:</h3>';
+    summaryHtml += '<p>MIN_MODULE_PX = 2.0-2.5 should work for clean renders. Use 3.0 for re-encoded images.</p>';
+    summary.innerHTML = summaryHtml;
+  </script>
+</body>
+</html>

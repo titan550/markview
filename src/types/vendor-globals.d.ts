@@ -10,6 +10,9 @@ import type {
   PrismGlobal,
   MarkdownItFactory,
   HtmlToImageGlobal,
+  PakoGlobal,
+  QRCodeGeneratorGlobal,
+  JsQRFn,
 } from "./vendors";
 
 declare global {
@@ -25,6 +28,9 @@ declare global {
     Prism?: PrismGlobal;
     markdownit?: MarkdownItFactory;
     htmlToImage?: HtmlToImageGlobal;
+    pako?: PakoGlobal;
+    qrcode?: QRCodeGeneratorGlobal;
+    jsQR?: JsQRFn;
   }
 }
 

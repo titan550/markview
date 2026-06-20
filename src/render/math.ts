@@ -8,24 +8,6 @@ import { svgToDataUrl, parseSvgSize, parseSvgSizeWithUnit, setSvgPixelSize } fro
 import type { MathRecord } from "../convert/markdownToHtml";
 
 /**
- * Check if inline math expression should be rendered.
- * Filters out currency-like patterns to avoid false positives.
- */
-export function shouldRenderInlineMath(expr: string): boolean {
-  const trimmed = (expr || "").trim();
-  if (!trimmed) return false;
-
-  // Skip currency-like patterns
-  const currencyLike =
-    /^\d[\d,]*(?:\.\d+)?(?:\s*(?:k|m|b|bn|mm|t))?(?:\s*(?:usd|eur|gbp|cad|aud|jpy|inr))?(?:\s*(?:to|–|-)\s*\d[\d,]*(?:\.\d+)?(?:\s*(?:k|m|b|bn|mm|t))?(?:\s*(?:usd|eur|gbp|cad|aud|jpy|inr))?)?$/i;
-  if (currencyLike.test(trimmed)) return false;
-
-  // Render if contains math-like characters
-  if (/[\\^_{}=]/.test(trimmed)) return true;
-  return /[A-Za-z]/.test(trimmed);
-}
-
-/**
  * Sanitize SVG for security.
  */
 function sanitizeSvg(svg: string): string {

@@ -2,6 +2,14 @@
  * Clipboard utilities for copying markdown and HTML.
  */
 
+import { base64ToBytes, base64ToUtf8, bytesToBase64 } from "../core/base64utf8";
+import { loadImage } from "../core/image";
+import { encodePayload, MV_METADATA_PREFIX } from "../core/markviewPayload";
+import { injectMarkviewITXt } from "../core/pngChunks";
+import { planQrChunks, compositeQrFooter } from "../core/qrEmbed";
+
+const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+
 /**
  * Copy text to clipboard.
  */
@@ -125,7 +133,7 @@ function inlineCodeBlockStyles(doc: Document, previewEl: HTMLElement): void {
     const livePre = livePreElements[i] as HTMLElement | undefined;
 
     let textColor = "#24292f";
-    let fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    let fontFamily = MONO_FONT;
 
     if (livePre) {
       const computed = window.getComputedStyle(livePre);
@@ -187,7 +195,7 @@ function inlineCodeBlockStyles(doc: Document, previewEl: HTMLElement): void {
     const codeEl = code as HTMLElement;
     codeEl.style.cssText = `
       background-color: rgba(175, 184, 193, 0.2);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-family: ${MONO_FONT};
       font-size: 0.9em;
       padding: 0.2em 0.4em;
       border-radius: 4px;
@@ -203,7 +211,7 @@ function inlineCodeBlockStyles(doc: Document, previewEl: HTMLElement): void {
     const code = preCodeElements[i] as HTMLElement;
     const liveCode = livePreCodeElements[i] as HTMLElement | undefined;
 
-    let fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+    let fontFamily = MONO_FONT;
     if (liveCode) {
       const computed = window.getComputedStyle(liveCode);
       fontFamily = computed.fontFamily || fontFamily;
@@ -248,9 +256,78 @@ function inlinePrismStyles(codeEl: HTMLElement, liveCodeEl?: HTMLElement): void 
   }
 }
 
+export interface EmbedOptions {
+  embedSource: boolean;
+  embedQr: boolean;
+}
+
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  return base64ToBytes(dataUrl.split(",")[1]);
+}
+
+function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
+  return `data:${mimeType};base64,${bytesToBase64(bytes)}`;
+}
+
+/**
+ * Embed diagram source into a PNG via iTXt metadata, plus an optional QR footer
+ * as a fallback for when metadata is stripped. Best-effort: returns the original
+ * data URL unchanged if anything fails.
+ */
+async function embedDiagramSource(
+  pngDataUrl: string,
+  lang: string,
+  sourceBase64: string,
+  embedQr: boolean
+): Promise<string> {
+  try {
+    const src = base64ToUtf8(sourceBase64);
+    if (!src) return pngDataUrl;
+
+    const envelope = encodePayload({ lang, src });
+    const metadataText = MV_METADATA_PREFIX + bytesToBase64(envelope);
+
+    let pngBytes = dataUrlToBytes(pngDataUrl);
+
+    if (embedQr) {
+      const { width } = await loadImage(pngDataUrl);
+      const plan = planQrChunks(envelope, width);
+      if (plan) {
+        // compositeQrFooter re-encodes the PNG and drops ancillary chunks,
+        // so the metadata is injected once afterwards.
+        pngBytes = await compositeQrFooter(pngBytes, plan);
+      }
+    }
+
+    pngBytes = injectMarkviewITXt(pngBytes, metadataText);
+    return bytesToDataUrl(pngBytes, "image/png");
+  } catch {
+    return pngDataUrl;
+  }
+}
+
+/** Rasterize a live diagram figure to a PNG data URL. */
+async function rasterizeFigureToPng(figure: HTMLElement): Promise<string | undefined> {
+  if (window.htmlToImage?.toPng) {
+    return window.htmlToImage.toPng(figure, { pixelRatio: 2, backgroundColor: "#ffffff" });
+  }
+
+  const svgEl = figure.querySelector("svg") as SVGSVGElement | null;
+  if (!svgEl) return undefined;
+
+  const blob = await svgToPngBlob(svgEl, 2);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Failed to read blob"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function prepareHtmlForClipboard(
   html: string,
-  previewEl: HTMLElement
+  previewEl: HTMLElement,
+  options?: EmbedOptions
 ): Promise<string> {
   const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -259,40 +336,34 @@ export async function prepareHtmlForClipboard(
   const liveFigures = previewEl.querySelectorAll("figure.diagram");
   const docFigures = doc.querySelectorAll("figure.diagram");
 
+  const embedSource = options?.embedSource ?? true;
+  const embedQr = options?.embedQr ?? true;
+
   for (let i = 0; i < liveFigures.length; i++) {
     const liveFigure = liveFigures[i] as HTMLElement;
-    const docFigure = docFigures[i];
+    const docFigure = docFigures[i] as HTMLElement | undefined;
     if (!docFigure) continue;
 
     let pngDataUrl: string | undefined;
+    try {
+      pngDataUrl = await rasterizeFigureToPng(liveFigure);
+    } catch {
+      continue; // Rasterization failed; leave the figure untouched.
+    }
+    if (!pngDataUrl) continue;
 
-    if (window.htmlToImage?.toPng) {
-      pngDataUrl = await window.htmlToImage.toPng(liveFigure, {
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-      });
-    } else {
-      const svgEl = liveFigure.querySelector("svg") as SVGSVGElement | null;
-      if (svgEl) {
-        const blob = await svgToPngBlob(svgEl, 2);
-        pngDataUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error("Failed to read blob"));
-          reader.readAsDataURL(blob);
-        });
-      }
+    const sourceBase64 = docFigure.getAttribute("data-source-base64") || "";
+    if (embedSource && sourceBase64) {
+      const lang = docFigure.getAttribute("data-diagram") || "mermaid";
+      pngDataUrl = await embedDiagramSource(pngDataUrl, lang, sourceBase64, embedQr);
     }
 
-    if (pngDataUrl) {
-      const img = doc.createElement("img");
-      img.src = pngDataUrl;
-      img.alt = "diagram";
-      img.style.cssText = "max-width:100%;height:auto;";
-
-      docFigure.innerHTML = "";
-      docFigure.appendChild(img);
-    }
+    const img = doc.createElement("img");
+    img.src = pngDataUrl;
+    img.alt = "diagram";
+    img.style.cssText = "max-width:100%;height:auto;";
+    docFigure.innerHTML = "";
+    docFigure.appendChild(img);
   }
 
   return doc.body.innerHTML;
